@@ -1,0 +1,9 @@
+[package]
+name = "simple-tic-tac-toe"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+anyhow = "1.0.86"
+inquire = "0.7.5"
+rand = "0.8.5"
