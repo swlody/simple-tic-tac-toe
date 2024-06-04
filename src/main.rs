@@ -1,6 +1,5 @@
 use inquire::Select;
 use rand::Rng;
-use std::cmp::{max, min};
 use std::fmt::Display;
 
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
@@ -10,6 +9,7 @@ enum Player {
 }
 
 impl Player {
+    /// Get the opponent for the given player
     fn opponent(self) -> Self {
         match self {
             Player::X => Player::O,
@@ -61,19 +61,51 @@ impl Display for Selection {
     }
 }
 
-fn get_char(square: Option<Player>) -> char {
-    match square {
-        Some(Player::X) => 'X',
-        Some(Player::O) => 'O',
-        None => '.',
-    }
-}
-
+/// Return the winner for a given line or None if there is no winner
 fn get_line_winner(a: Option<Player>, b: Option<Player>, c: Option<Player>) -> Option<Player> {
-    if a != None && a == b && b == c {
+    if a.is_some() && a == b && b == c {
         a
     } else {
         None
+    }
+}
+
+#[derive(Eq, PartialEq, Ord, PartialOrd)]
+enum GameResult {
+    Loss = -1,
+    Tie = 0,
+    Win = 1,
+}
+
+/// Minimax algorithm to choose the best move
+fn minimax(state: &GameState, maximizing_player: Player) -> GameResult {
+    if let Some(winner) = state.winner() {
+        if winner == maximizing_player {
+            return GameResult::Win;
+        } else {
+            return GameResult::Loss;
+        }
+    }
+
+    // Check tied game state
+    let possible_moves = state.open_squares();
+    if possible_moves.is_empty() {
+        return GameResult::Tie;
+    }
+
+    if state.next_player == maximizing_player {
+        // Unwrap since we already checked possible_moves.is_empty()
+        possible_moves
+            .iter()
+            .map(|m| minimax(&state.with_move(m.place), maximizing_player))
+            .max()
+            .unwrap()
+    } else {
+        possible_moves
+            .iter()
+            .map(|m| minimax(&state.with_move(m.place), maximizing_player))
+            .min()
+            .unwrap()
     }
 }
 
@@ -81,41 +113,6 @@ fn get_line_winner(a: Option<Player>, b: Option<Player>, c: Option<Player>) -> O
 struct GameState {
     board: [Option<Player>; 9],
     next_player: Player,
-}
-
-fn minimax(state: &GameState, maximizing_player: Player) -> i32 {
-    if let Some(winner) = state.winner() {
-        if winner == maximizing_player {
-            return 10;
-        } else {
-            return -10;
-        }
-    }
-
-    let possible_moves = state.open_squares();
-    if possible_moves.len() == 0 {
-        return 0;
-    }
-
-    if state.next_player == maximizing_player {
-        let mut best_so_far = -100;
-        for m in possible_moves {
-            best_so_far = max(
-                best_so_far,
-                minimax(&state.with_move(m.place), maximizing_player),
-            );
-        }
-        return best_so_far;
-    } else {
-        let mut best_so_far = 100;
-        for m in possible_moves {
-            best_so_far = min(
-                best_so_far,
-                minimax(&state.with_move(m.place), maximizing_player),
-            );
-        }
-        return best_so_far;
-    }
 }
 
 impl GameState {
@@ -126,41 +123,44 @@ impl GameState {
         }
     }
 
+    /// Apply a move to the gamestate
     fn apply_move(&mut self, place: usize) {
         self.board[place] = Some(self.next_player);
         self.next_player = self.next_player.opponent();
     }
 
+    /// Get a new GameState with the given move applied
     fn with_move(&self, place: usize) -> Self {
         let mut new_state = self.clone();
         new_state.apply_move(place);
         new_state
     }
 
-    fn smart_choice(&self, player: Player) -> Selection {
+    /// Get a list of the best moves
+    fn get_best_moves(&self, player: Player) -> Vec<Selection> {
+        // Start with the remaining possible moves
         let possible_moves = self.open_squares();
 
-        let mut best_so_far = -100;
-
+        let mut best_so_far = GameResult::Loss;
+        // The list of moves that lead to wins
         let mut winning_moves = Vec::new();
 
         for m in possible_moves {
-            let move_score = minimax(&self.with_move(m.place), player);
+            let move_result = minimax(&self.with_move(m.place), player);
 
-            if move_score > best_so_far {
-                best_so_far = move_score;
-                winning_moves = Vec::new();
+            if move_result > best_so_far {
+                best_so_far = move_result;
+                winning_moves.clear();
                 winning_moves.push(m);
-            } else if move_score == best_so_far {
+            } else if move_result == best_so_far {
                 winning_moves.push(m);
             }
         }
 
-        // Randomly choose one of the best moves to avoid repetitive games
-        let mut rng = rand::thread_rng();
-        winning_moves[rng.gen_range(0..winning_moves.len())]
+        winning_moves
     }
 
+    /// Get a list of open squares, i.e. squares that are possible options for moves
     fn open_squares(&self) -> Vec<Selection> {
         self.board
             .iter()
@@ -175,6 +175,7 @@ impl GameState {
             .collect()
     }
 
+    /// Return the winner or None if there is no winner
     fn winner(&self) -> Option<Player> {
         for a in 0..3 {
             // Check rows
@@ -207,6 +208,14 @@ impl GameState {
     }
 }
 
+fn get_char(square: Option<Player>) -> char {
+    match square {
+        Some(Player::X) => 'X',
+        Some(Player::O) => 'O',
+        None => '.',
+    }
+}
+
 impl ToString for GameState {
     fn to_string(&self) -> String {
         let mut s = String::new();
@@ -218,7 +227,7 @@ impl ToString for GameState {
                 get_char(self.board[x + 2]),
             ));
             if x != 6 {
-                s.push_str(&format!("---|---|---\n"));
+                s.push_str("---|---|---\n");
             }
         }
         s
@@ -233,11 +242,11 @@ fn main() -> anyhow::Result<()> {
 
     loop {
         let possible_moves = game.open_squares();
-        if possible_moves.len() == 0 {
+        if possible_moves.is_empty() {
             break;
         }
 
-        let selection = if game.next_player == user_player {
+        let next_move = if game.next_player == user_player {
             println!("{}", game.to_string());
             let page_size = possible_moves.len();
             let selection = Select::new("Where will you move?", possible_moves)
@@ -245,12 +254,16 @@ fn main() -> anyhow::Result<()> {
                 .prompt()?;
             selection.place
         } else {
-            let computer_selection = game.smart_choice(user_player.opponent());
+            let computer_selection = game.get_best_moves(user_player.opponent());
+
+            // Randomly choose one of the best moves to avoid repetitive games
+            let mut rng = rand::thread_rng();
+            let computer_selection = computer_selection[rng.gen_range(0..computer_selection.len())];
             println!("Computer moved to {}", computer_selection);
             computer_selection.place
         };
 
-        game.apply_move(selection);
+        game.apply_move(next_move);
 
         winner = game.winner();
         if winner.is_some() {
