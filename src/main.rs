@@ -129,7 +129,7 @@ impl GameState {
         self.next_player = self.next_player.opponent();
     }
 
-    /// Get a new GameState with the given move applied
+    /// Get a new `GameState` with the given move applied
     fn with_move(&self, place: usize) -> Self {
         let mut new_state = self.clone();
         new_state.apply_move(place);
@@ -177,19 +177,19 @@ impl GameState {
 
     /// Return the winner or None if there is no winner
     fn winner(&self) -> Option<Player> {
-        for a in 0..3 {
+        for i in 0..3 {
             // Check rows
             if let Some(winner) = get_line_winner(
-                self.board[a * 3],
-                self.board[a * 3 + 1],
-                self.board[a * 3 + 2],
+                self.board[i * 3],
+                self.board[i * 3 + 1],
+                self.board[i * 3 + 2],
             ) {
                 return Some(winner);
             }
 
             // Check columns
             if let Some(winner) =
-                get_line_winner(self.board[a], self.board[a + 3], self.board[a + 6])
+                get_line_winner(self.board[i], self.board[i + 3], self.board[i + 6])
             {
                 return Some(winner);
             }
@@ -216,21 +216,21 @@ fn get_char(square: Option<Player>) -> char {
     }
 }
 
-impl ToString for GameState {
-    fn to_string(&self) -> String {
+impl Display for GameState {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let mut s = String::new();
-        for x in (0..9).step_by(3) {
+        for i in (0..9).step_by(3) {
             s.push_str(&format!(
                 " {} | {} | {} \n",
-                get_char(self.board[x]),
-                get_char(self.board[x + 1]),
-                get_char(self.board[x + 2]),
+                get_char(self.board[i]),
+                get_char(self.board[i + 1]),
+                get_char(self.board[i + 2]),
             ));
-            if x != 6 {
+            if i != 6 {
                 s.push_str("---|---|---\n");
             }
         }
-        s
+        write!(f, "{s}")
     }
 }
 
@@ -247,7 +247,7 @@ fn main() -> anyhow::Result<()> {
         }
 
         let next_move = if game.next_player == user_player {
-            println!("{}", game.to_string());
+            println!("{game}");
             let page_size = possible_moves.len();
             let selection = Select::new("Where will you move?", possible_moves)
                 .with_page_size(page_size)
@@ -259,7 +259,7 @@ fn main() -> anyhow::Result<()> {
             // Randomly choose one of the best moves to avoid repetitive games
             let mut rng = rand::thread_rng();
             let computer_selection = computer_selection[rng.gen_range(0..computer_selection.len())];
-            println!("Computer moved to {}", computer_selection);
+            println!("Computer moved to {computer_selection}");
             computer_selection.place
         };
 
@@ -271,14 +271,17 @@ fn main() -> anyhow::Result<()> {
         }
     }
 
-    println!("{}", game.to_string());
+    println!("{game}");
 
-    if winner == Some(user_player) {
-        println!("Congratulations, you won!");
-    } else if winner == Some(user_player.opponent()) {
-        println!("You lost, better luck next time.");
-    } else {
-        println!("The game ended in a tie.");
+    match winner {
+        Some(player) => {
+            if player == user_player {
+                println!("Congratulations, you won!");
+            } else {
+                println!("You lost, better luck next time.");
+            }
+        }
+        None => println!("The game ended in a tie."),
     }
 
     Ok(())
